@@ -31,7 +31,6 @@ platform_check_image() {
 	dir-620-a1 | \
 	dap-1350 | \
 	esr-9753 | \
-	fonera20n | \
 	rt-n13u | \
 	freestation5 | \
 	hw550-3g | \
@@ -65,8 +64,22 @@ platform_check_image() {
 		}
 		return 0
 		;;
+	br6425)
+		[ "$magic" != "43535953" ] && {
+			echo "Invalid image type."
+			return 1
+		}
+		return 0
+		;;
 	dir-645)
 		[ "$magic" != "5ea3a417" ] && {
+			echo "Invalid image type."
+			return 1
+		}
+		return 0
+		;;
+	fonera20n)
+		[ "$magic" != "5253444b" ] && {
 			echo "Invalid image type."
 			return 1
 		}
