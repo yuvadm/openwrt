@@ -72,6 +72,18 @@ define MkCombineduImage
 	$(call MkImage,lzma,$(KDIR)/vmlinux-$(2).bin.lzma.combined,$(call sysupname,$(1),$(2)),$(6))
 endef
 
+define PrepareEdimaxImage
+	$(call PatchKernelLzma,$(2),$(3))
+	if [ `stat -c%s "$(KDIR)/vmlinux-$(2).bin.lzma"` -gt `expr $(4) - 84` ]; then \
+		echo "Warning: $(KDIR)/vmlinux-$(2).bin.lzma is too big"; \
+	else if [ `stat -c%s "$(KDIR)/root.$(1)"` -gt $(5) ]; then \
+		echo "Warning: $(KDIR)/root.$(1) is too big"; \
+	else \
+		( dd if=$(KDIR)/vmlinux-$(2).bin.lzma bs=`expr $(4) - 84` conv=sync ; dd if=$(KDIR)/root.$(1) ) > $(KDIR)/vmlinux-$(2).bin.lzma.combined ; \
+	fi ; fi
+	$(call MkImage,lzma,$(KDIR)/vmlinux-$(2).bin.lzma.combined,$(KDIR)/vmlinux-$(2).bin.lzma.combined.uImage,$(6))
+endef
+
 define CatFiles
 	if [ `stat -c%s "$(1)"` -gt $(2) ]; then \
 		echo "Warning: $(1) is too big"; \
@@ -119,12 +131,30 @@ define BuildFirmware/Generic/initramfs
 endef
 
 mtdlayout_4M=192k(u-boot)ro,64k(u-boot-env)ro,64k(factory)ro,896k(kernel),2880k(rootfs),3776k@0x50000(firmware)
+kernel_size_4M=917504
+rootfs_size_4M=2949120
 define BuildFirmware/GENERIC_4M
-	$(call BuildFirmware/Generic,$(1),$(2),$(call mkcmdline,$(3),$(4),$(5)) $(call mkmtd/$(6),$(mtdlayout_4M)),917504,2949120,$(7),$(8))
+	$(call BuildFirmware/Generic,$(1),$(2),$(call mkcmdline,$(3),$(4),$(5)) $(call mkmtd/$(6),$(mtdlayout_4M)),$(kernel_size_4M),$(rootfs_size_4M))
 endef
 
 define BuildFirmware/GENERIC_4M/initramfs
 	$(call BuildFirmware/Generic/initramfs,$(1),$(2),$(call mkcmdline,$(3),$(4),$(5)) $(call mkmtd/$(6),$(mtdlayout_4M)))
+endef
+
+define BuildFirmware/UIMAGE_4M
+	$(call MkCombineduImage,$(1),$(2),$(call mkcmdline,$(3),$(4),$(5)) $(call mkmtd/$(6),$(mtdlayout_4M)),$(kernel_size_4M),$(rootfs_size_4M),$(7))
+endef
+
+define BuildFirmware/UIMAGE_4M/initramfs
+	$(call BuildFirmware/GENERIC_4M/initramfs,$(1),$(2),$(3),$(4),$(5),$(6))
+endef
+
+define BuildFirmware/EDIMAX_4M
+	$(call PrepareEdimaxImage,$(1),$(2),$(call mkcmdline,$(3),$(4),$(5)) $(call mkmtd/$(6),$(mtdlayout_4M)),$(kernel_size_4M),$(rootfs_size_4M),$(7))
+endef
+
+define BuildFirmware/EDIMAX_4M/initramfs
+	$(call BuildFirmware/GENERIC_4M/initramfs,$(1),$(2),$(3),$(4),$(5),$(6))
 endef
 
 mtdlayout_8M=192k(u-boot)ro,64k(u-boot-env)ro,64k(factory)ro,896k(kernel),6976k(rootfs),7872k@0x50000(firmware)
@@ -140,6 +170,18 @@ endef
 
 define BuildFirmware/UIMAGE_8M
 	$(call MkCombineduImage,$(1),$(2),$(call mkcmdline,$(3),$(4),$(5)) $(call mkmtd/$(6),$(mtdlayout_8M)),$(kernel_size_8M),$(rootfs_size_8M),$(7))
+endef
+
+define BuildFirmware/UIMAGE_8M/initramfs
+	$(call BuildFirmware/GENERIC_8M/initramfs,$(1),$(2),$(3),$(4),$(5),$(6))
+endef
+
+define BuildFirmware/EDIMAX_8M
+	$(call PrepareEdimaxImage,$(1),$(2),$(call mkcmdline,$(3),$(4),$(5)) $(call mkmtd/$(6),$(mtdlayout_8M)),$(kernel_size_8M),$(rootfs_size_8M),$(7))
+endef
+
+define BuildFirmware/EDIMAX_8M/initramfs
+	$(call BuildFirmware/GENERIC_8M/initramfs,$(1),$(2),$(3),$(4),$(5),$(6))
 endef
 
 mtdlayout_edimax_3g6200n=192k(u-boot)ro,64k(u-boot-env)ro,64k(factory)ro,896k(kernel),2752k(rootfs),128k@0x3e0000(cimage)ro,3648k@0x50000(firmware)
@@ -250,8 +292,8 @@ define BuildFirmware/DIR620A1/initramfs
 endef
 
 define BuildFirmware/Edimax
-	if [ -e "$(call sysupname,$(1),$(2))" ]; then \
-		mkedimaximg -i $(call sysupname,$(1),$(2)) \
+	if [ -e "$(KDIR)/vmlinux-$(2).bin.lzma.combined" ]; then \
+		mkedimaximg -i $(KDIR)/vmlinux-$(2).bin.lzma.combined.uImage \
 			-o $(call imgname,$(1),$(2))-factory.bin \
 			-s $(3) -m $(4) -f $(5) -S $(6); \
 	fi
@@ -270,7 +312,7 @@ define BuildFirmware/F5D8235
 endef
 
 define BuildFirmware/FONERA20N
-	$(call BuildFirmware/GENERIC_8M,$(1),fonera20n,FONERA20N,ttyS1,57600,phys)
+	$(call BuildFirmware/EDIMAX_8M,$(1),fonera20n,FONERA20N,ttyS1,57600,phys)
 	$(call BuildFirmware/Edimax,$(1),fonera20n,RSDK,NL1T,0x50000,0xc0000)
 endef
 
@@ -492,6 +534,11 @@ define Image/Build/Profile/BC2
 	$(call Image/Build/Template/$(fs_squash)/$(1),GENERIC_8M,bc2,BC2,ttyS1,57600,phys)
 endef
 
+define Image/Build/Profile/BR6425
+	$(call Image/Build/Template/$(fs_squash)/$(1),EDIMAX_4M,br-6425,BR-6425,ttyS1,57600,phys)
+	$(call BuildFirmware/Edimax,$(1),br-6425,CSYS,RN52,0x50000,0xE0000)
+endef
+
 define Image/Build/Profile/BROADWAY
 	$(call Image/Build/Template/$(fs_squash)/$(1),BROADWAY,broadway,BROADWAY,ttyS1,57600,phys)
 endef
@@ -645,6 +692,7 @@ define Image/Build/Profile/Default
 	$(call Image/Build/Profile/ALL5002,$(1))
 	$(call Image/Build/Profile/ARGUS_ATP52B,$(1))
 	$(call Image/Build/Profile/BC2,$(1))
+	$(call Image/Build/Profile/BR6425,$(1))
 	$(call Image/Build/Profile/BROADWAY,$(1))
 	$(call Image/Build/Profile/CARAMBOLA,$(1))
 	$(call Image/Build/Profile/DIR300B1,$(1))
